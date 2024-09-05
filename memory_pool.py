@@ -12,5 +12,4 @@ def memory_pool_func():
     memory_pool_info = cp.get_default_memory_pool()
     print("Allocated memory:", memory_pool_info.total_bytes() / (1024**3), "GB")
 
-
 # End-of-file (EOF)
