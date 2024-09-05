@@ -22,28 +22,6 @@ def load_volume_mesh(filepath):
     print("Volume mesh loaded successfully.")
     return mesh
 
-
-def assign_material_properties(mesh, cohesion, friction_angle, density, e, nu):
-    """Assign Material Properties
-
-    Args:
-        mesh (pyvista.DataSet): The finite element mesh object that contains the geometry
-        and connectivity information of the entire domain.
-        cohesion (int): Cohesion in Pascals
-        friction_angle (int): Friction angle in degrees
-        density (int): Density in kg/m³
-        E (float): Young's modulus in Pascals
-        nu (float): Poisson's ratio
-    """
-    print("Assigning material properties...")
-    mesh["cohesion"] = np.full(mesh.n_cells, cohesion)  # Keep it as NumPy
-    mesh["friction_angle"] = np.full(mesh.n_cells, friction_angle)  # Keep it as NumPy
-    mesh["density"] = np.full(mesh.n_cells, density)  # Keep it as NumPy
-    mesh["E"] = np.full(mesh.n_cells, e)  # Keep it as NumPy
-    mesh["nu"] = np.full(mesh.n_cells, nu)  # Keep it as NumPy
-    print("Material properties assigned.")
-
-
 # ! Compute Jacobian -> find a native library
 def compute_jacobian(element_nodes, dn_dxi):
     """Computes teh jacobian matrix

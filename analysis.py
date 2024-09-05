@@ -1,3 +1,4 @@
+"""COntains the functions that provide analysis"""
 import cupy as cp  # CuPy for GPU acceleration
 
 import numpy as np  # NumPy for handling some CPU-based operations
@@ -42,8 +43,8 @@ def analyze_stress_strain_optimized(
     stress_tensor, strain_tensor, yield_stress, ultimate_stress
 ):
     """
-    Optimized analysis of stress and strain fields to identify areas with significant plastic deformation
-    or where stress limits are exceeded.
+    Optimized analysis of stress and strain fields to identify areas with significant plastic 
+    deformationb or where stress limits are exceeded.
 
     Args:
         mesh (pv.UnstructuredGrid): The mesh of the model.
@@ -72,7 +73,7 @@ def analyze_stress_strain_optimized(
         "plastic_deformation": plastic_deformation_mask,
         "high_shear_stress": high_shear_stress_mask,
     }
-    
+
 def connected_component_analysis(mesh, failing_elements):
     """
     Perform connected component analysis to detect coherent failure surfaces.
@@ -135,21 +136,29 @@ def extract_failure_surfaces(mesh, connected_components):
     return failure_surfaces
 
 def slope_stability_analysis(
-    mesh, failure_surfaces, stress_tensor, strain_tensor, fos, external_factors
+    failure_surfaces, stress_tensor, fos, external_factors
 ):
     """
-    Perform a detailed slope stability and failure mode analysis based on the provided mesh data, failure surfaces, and external factors.
+    Perform a detailed slope stability and failure mode analysis based on the provided mesh data, 
+    failure surfaces, and external factors.
 
     Args:
-        mesh (pv.UnstructuredGrid): The mesh of the model, typically representing a slope in geotechnical analysis.
-        failure_surfaces (list): A list of extracted failure surfaces, each potentially representing a different failure mechanism.
-        stress_tensor (cp.ndarray): A tensor containing stress values for each element in the mesh.
-        strain_tensor (cp.ndarray): A tensor containing strain values for each element in the mesh.
-        fos (cp.ndarray): An array containing the calculated Factor of Safety for each element.
-        external_factors (dict): A dictionary containing external factors such as seismic coefficients, water pressures, etc., that affect slope stability.
+        mesh (pv.UnstructuredGrid): The mesh of the model, 
+        typically representing a slope in geotechnical analysis.
+        failure_surfaces (list): A list of extracted failure surfaces, 
+        each potentially representing a different failure mechanism.
+        stress_tensor (cp.ndarray): A tensor containing stress values for 
+        each element in the mesh.
+        strain_tensor (cp.ndarray): A tensor containing strain values for 
+        each element in the mesh.
+        fos (cp.ndarray): An array containing the calculated Factor of 
+        Safety for each element.
+        external_factors (dict): A dictionary containing external factors such as 
+        seismic coefficients, water pressures, etc., that affect slope stability.
 
     Returns:
-        dict: A dictionary containing results of the slope stability analysis, including identified failure modes and critical surfaces.
+        dict: A dictionary containing results of the slope stability analysis, 
+        including identified failure modes and critical surfaces.
     """
     print("Performing slope stability analysis...")
 
@@ -237,7 +246,8 @@ def analyze_failure_modes(failure_surfaces):
 
 def analyze_shear_bands(mesh, strain_tensor, shear_strain_threshold):
     """
-    Enhanced identification of potential shear bands by analyzing areas with concentrated shear strain directly on the GPU.
+    Enhanced identification of potential shear bands by analyzing areas 
+    with concentrated shear strain directly on the GPU.
 
     Args:
         mesh (pv.UnstructuredGrid): The mesh of the model.
@@ -269,7 +279,7 @@ def analyze_shear_bands(mesh, strain_tensor, shear_strain_threshold):
     print(f"Number of elements identified as shear bands: {len(shear_band_elements)}")
     return shear_bands
 
-def analyze_slip_surface(mesh, U_global, displacement_threshold):
+def analyze_slip_surface(mesh, u_global, displacement_threshold):
     """
     Detect potential slip surfaces by analyzing zones of continuous displacement.
 
@@ -284,7 +294,7 @@ def analyze_slip_surface(mesh, U_global, displacement_threshold):
     print("Performing slip surface analysis...")
 
     # Calculate the displacement magnitude for each node
-    displacement_magnitude = cp.linalg.norm(U_global.reshape(-1, 3), axis=1)
+    displacement_magnitude = cp.linalg.norm(u_global.reshape(-1, 3), axis=1)
     displacement_magnitude_np = cp.asnumpy(displacement_magnitude)
 
     # Identify elements where displacement exceeds the threshold
@@ -300,24 +310,31 @@ def analyze_slip_surface(mesh, U_global, displacement_threshold):
     )
     return slip_surfaces
 
-def get_displacement_vectors(failure_surfaces, U_global):
+def get_displacement_vectors(failure_surfaces, u_global):
     """
     Calculate average displacement vectors for cells in each failure surface of the mesh.
 
     Args:
-        mesh (pv.UnstructuredGrid): The mesh of the model, not directly used but relevant if expansion needed.
-        failure_surfaces (list of pv.UnstructuredGrid): List of mesh subsets, each representing a failure surface.
-        U_global_np (numpy.ndarray): Flattened array of displacements for all nodes in the mesh. Expected to have a length that is a multiple of 3, as each node's displacement is represented by three consecutive elements (x, y, z displacements).
+        mesh (pv.UnstructuredGrid): The mesh of the model, 
+        not directly used but relevant if expansion needed.
+        failure_surfaces (list of pv.UnstructuredGrid): List of mesh subsets, 
+        each representing a failure surface.
+        U_global_np (numpy.ndarray): Flattened array of displacements for all nodes in the mesh. 
+        Expected to have a length that is a multiple of 3, as each node's displacement is 
+        represented by three consecutive elements (x, y, z displacements).
 
     Returns:
-        list of numpy.ndarray: Each element of the list is a numpy array where each row represents the average displacement vector of all nodes within a cell of the corresponding failure surface.
+        list of numpy.ndarray: Each element of the list is a numpy array 
+        where each row represents the average displacement vector of all 
+        nodes within a cell of the corresponding failure surface.
 
     Raises:
-        ValueError: If any node index in the surfaces is invalid or if `U_global_np` is not structured as expected.
+        ValueError: If any node index in the surfaces is invalid 
+        or if `U_global_np` is not structured as expected.
     """
-    U_global_np = U_global.get()
-    
-    if U_global_np.ndim != 1 or (len(U_global_np) % 3) != 0:
+    u_global_np = u_global.get()
+
+    if u_global_np.ndim != 1 or (len(u_global_np) % 3) != 0:
         raise ValueError(
             "Global displacement array must be a flat array with length a multiple of 3."
         )
@@ -331,13 +348,13 @@ def get_displacement_vectors(failure_surfaces, U_global):
             cell = surface.get_cell(i)
             node_indices = np.array(cell.point_ids).astype(int)
 
-            if np.any(node_indices >= len(U_global_np) // 3):
+            if np.any(node_indices >= len(u_global_np) // 3):
                 raise ValueError(
                     f"Invalid node index found in cell {i}; indices exceed displacement array size."
                 )
 
             # Efficiently fetch displacements for all nodes in the cell
-            node_displacements = U_global_np[
+            node_displacements = u_global_np[
                 node_indices * 3 : (node_indices * 3 + 3)
             ].reshape(-1, 3)
             surface_vectors[i] = np.mean(node_displacements, axis=0)
@@ -529,4 +546,4 @@ def compute_resultant_direction_and_magnitude(
 
     print("Resultant direction and magnitude computation completed.")
     return resultant_directions, resultant_magnitudes
-
+# End-of-file (EOF)

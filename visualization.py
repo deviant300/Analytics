@@ -2,6 +2,7 @@
 import cupy as cp  # CuPy for GPU acceleration
 import pyvista as pv
 import numpy as np  # NumPy for handling some CPU-based operations
+import matplotlib.cm as cm
 
 def plot_fixed_nodes(mesh, fixed_nodes, point_size=10, mesh_opacity=0.5):
     """Plots a finite element mesh and highlights the fixed nodes.
@@ -226,8 +227,8 @@ def visualize_fos_distribution(mesh, fos, custom_range=None):
     )
 
     # Enable user interaction for more detailed examination
-    plotter.enable_zoom()
-    plotter.enable_picking()
+    plotter.enable_zoom_style()
+    plotter.enable_point_picking()
 
     plotter.show()
 
@@ -244,10 +245,11 @@ def visualize_connected_components(mesh, connected_components):
     plotter = pv.Plotter()
     unique_labels = np.unique(connected_components)
 
-    # Generate a list of colors for each component
-    colors = pv.plotting.get_cmap(
-        "viridis", len(unique_labels) - 1
-    )  # Exclude the zero label
+    # Generate a color map using Matplotlib
+    cmap = cm.get_cmap("viridis", len(unique_labels) - 1)  # Exclude the zero label
+
+    # Map each label to a color from the color map
+    colors = [cmap(i) for i in range(len(unique_labels) - 1)]
 
     # Add each connected component with a unique color
     color_index = 0
@@ -265,8 +267,9 @@ def visualize_connected_components(mesh, connected_components):
         color_index += 1
 
     plotter.add_legend()
-    plotter.enable_zoom()  # Allow users to zoom into specific components
-    plotter.enable_picking()  # Allow picking of components to display more details
+    # Enable user interaction for more detailed examination
+    plotter.enable_zoom_style()
+    plotter.enable_point_picking()
     plotter.show()
 
 def visualize_shear_bands_and_slip_surfaces(
@@ -279,7 +282,8 @@ def visualize_shear_bands_and_slip_surfaces(
     slip_surface_color="orange",
 ):
     """
-    Enhanced visualization of shear bands and slip surfaces on the mesh with customizable color and opacity settings.
+    Enhanced visualization of shear bands and slip surfaces on the mesh with customizable color 
+    and opacity settings.
 
     Args:
         mesh (pv.UnstructuredGrid): The mesh of the model.
@@ -314,8 +318,8 @@ def visualize_shear_bands_and_slip_surfaces(
     )
 
     plotter.add_legend()
-    plotter.enable_zoom()
-    plotter.enable_rotation()
+    plotter.enable_zoom_style()
+    plotter.enable_terrain_style()
     plotter.show()
 
 def plot_resultant_directions_and_magnitudes(
@@ -497,3 +501,4 @@ def plot_failure_features(
 
     # Show plot
     plotter.show()
+# End-of-file (EOF)
