@@ -145,7 +145,8 @@ def connected_component_analysis_dask(mesh, failing_elements):
         failing_elements = da.from_array(failing_elements, chunks='auto')
 
     # Convert the failing elements to NumPy (for label operation compatibility with SciPy)
-    failing_elements_np = failing_elements.compute() if isinstance(failing_elements, da.Array) else failing_elements.get()
+    failing_elements_np = failing_elements.compute() if isinstance(
+        failing_elements, da.Array) else failing_elements.get()
 
     # Initialize a mask array to identify failing elements
     element_mask = np.zeros(mesh.n_cells, dtype=bool)
@@ -169,7 +170,8 @@ def extract_failure_surfaces_dask(mesh, connected_components):
         connected_components (dask.array.Array or np.ndarray): Array of connected component labels.
 
     Returns:
-        dask.delayed.Delayed: A delayed object representing the list of extracted surfaces for each connected component.
+        dask.delayed.Delayed: A delayed object representing the list of extracted surfaces for 
+        each connected component.
     """
     print("Extracting failure surfaces in parallel...")
 
@@ -181,7 +183,7 @@ def extract_failure_surfaces_dask(mesh, connected_components):
 
     # Get the unique labels, skipping label 0 (non-failing elements)
     unique_labels = np.unique(connected_components)
-    
+
     # Delayed list of failure surfaces
     failure_surfaces = []
 
@@ -213,16 +215,14 @@ def slope_stability_analysis_dask(
         each element in the mesh.
         fos (dask.array.Array or cupy.ndarray): An array containing the calculated Factor of 
         Safety for each element.
-        external_factors (dict): A dictionary containing external factors such as seismic coefficients, 
-        water pressures, etc., that affect slope stability.
+        external_factors (dict): A dictionary containing external factors such as seismic 
+        coefficients, water pressures, etc., that affect slope stability.
 
     Returns:
         dask.delayed.Delayed: A delayed object containing results of the slope stability analysis, 
         including identified failure modes and critical surfaces.
     """
     print("Performing slope stability analysis in parallel...")
-
-    results = {"failure_modes": [], "critical_surfaces": []}
 
     # Iterate over each failure surface in parallel
     tasks = []
@@ -284,13 +284,15 @@ def aggregate_results(tasks):
 
 def analyze_failure_modes_dask(failure_surfaces):
     """
-    Analyze the geometry and orientation of failure surfaces to determine likely failure modes using Dask.
+    Analyze the geometry and orientation of failure surfaces to determine 
+    likely failure modes using Dask.
 
     Args:
         failure_surfaces (list): List of extracted failure surfaces.
 
     Returns:
-        dask.delayed.Delayed: A delayed object representing the list of likely failure modes for each failure surface.
+        dask.delayed.Delayed: A delayed object representing the list of likely 
+        failure modes for each failure surface.
     """
     print("Analyzing geometry and orientation of failure surfaces in parallel...")
 
@@ -409,82 +411,62 @@ def analyze_slip_surface_dask(mesh, u_global, displacement_threshold):
 
 def get_displacement_vectors_dask(failure_surfaces, u_global):
     """
-    Calculate average displacement vectors for cells in each failure surface of the mesh using Dask.
+    Calculate average displacement vectors for cells in each failure surface of the mesh using Dask 
+    for large data handling.
 
     Args:
         failure_surfaces (list of pv.UnstructuredGrid): List of mesh subsets, 
         each representing a failure surface.
-        u_global (dask.array.Array or numpy.ndarray): Flattened array of displacements for all nodes 
-        in the mesh. Expected to have a length that is a multiple of 3, as each node's displacement is 
-        represented by three consecutive elements (x, y, z displacements).
+        u_global (dask.array.Array or cp.ndarray): Flattened array of displacements for all 
+        nodes in the mesh. Expected to have a length that is a multiple of 3, as each node's 
+        displacement is represented by three consecutive elements (x, y, z displacements).
 
     Returns:
-        dask.array.Array: Each element of the array is a Dask array where each row represents 
-        the average displacement vector of all nodes within a cell of the corresponding failure surface.
+        list of numpy.ndarray: Each element of the list is a numpy array 
+        where each row represents the average displacement vector of all 
+        nodes within a cell of the corresponding failure surface.
 
     Raises:
-        ValueError: If any node index in the surfaces is invalid or if `u_global` is not 
-        structured as expected.
+        ValueError: If any node index in the surfaces is invalid 
+        or if `u_global` is not structured as expected.
     """
+    # If u_global is a Dask array, compute it
+    if isinstance(u_global, da.Array):
+        u_global_np = u_global.compute()
+    else:
+        # If it's a CuPy array, convert it to NumPy
+        u_global_np = u_global.get()
 
-    # Ensure the displacement array is a Dask array
-    if not isinstance(u_global, da.Array):
-        u_global = da.from_array(u_global, chunks='auto')
+    # Ensure that the displacement array has the correct structure
+    if u_global_np.ndim != 1 or (len(u_global_np) % 3) != 0:
+        raise ValueError(
+            "Global displacement array must be a flat array with length a multiple of 3."
+        )
 
-    # Check if the u_global array is properly structured
-    if u_global.ndim != 1 or (len(u_global) % 3) != 0:
-        raise ValueError("Global displacement array must be a flat array with length a multiple of 3.")
-
-    # List to store displacement vectors for each surface
     displacement_vectors = []
-
-    # Loop over each failure surface
     for surface in failure_surfaces:
         # Preallocate array to store average displacements for each cell
-        surface_vectors = da.zeros((surface.n_cells, 3), chunks='auto')
+        surface_vectors = np.zeros((surface.n_cells, 3))
 
-        # Create delayed tasks for each cell's displacement vector calculation
-        tasks = []
         for i in range(surface.n_cells):
-            task = da.delayed(calculate_cell_displacement)(
-                i, surface, u_global
-            )
-            tasks.append(task)
+            cell = surface.get_cell(i)
+            node_indices = np.array(cell.point_ids).astype(int)
 
-        # Convert delayed tasks to a Dask array
-        surface_vectors = da.from_delayed(tasks, shape=(surface.n_cells, 3), dtype=float)
+            if np.any(node_indices >= len(u_global_np) // 3):
+                raise ValueError(
+                    f"Invalid node index found in cell {i}; indices exceed displacement array size."
+                )
+
+            # Efficiently fetch displacements for all nodes in the cell
+            node_displacements = u_global_np[
+                node_indices * 3 : (node_indices * 3 + 3)
+            ].reshape(-1, 3)
+            surface_vectors[i] = np.mean(node_displacements, axis=0)
 
         displacement_vectors.append(surface_vectors)
 
+
     return displacement_vectors
-
-# ! <<<<<<<<<<<<<<<<<<<< helper funcs >>>>>>>>>>>>>>>>>>>>
-def calculate_cell_displacement(i, surface, u_global):
-    """
-    Helper function to calculate the average displacement vector for a single cell.
-
-    Args:
-        i (int): Cell index.
-        surface (pv.UnstructuredGrid): The surface containing the cell.
-        u_global (dask.array.Array or numpy.ndarray): Global displacement vector.
-
-    Returns:
-        numpy.ndarray: Average displacement vector for the cell.
-    """
-    cell = surface.get_cell(i)
-    node_indices = np.array(cell.point_ids).astype(int)
-
-    if np.any(node_indices >= len(u_global) // 3):
-        raise ValueError(f"Invalid node index found in cell {i}; indices exceed displacement array size.")
-
-    # Efficiently fetch displacements for all nodes in the cell
-    node_displacements = u_global[
-        node_indices * 3 : (node_indices * 3 + 3)
-    ].reshape(-1, 3)
-
-    # Calculate the average displacement for the cell
-    return np.mean(node_displacements, axis=0)
-# ? <<<<<<<<<<<<<<<<<<<< helper funcs >>>>>>>>>>>>>>>>>>>>
 
 def identify_failing_elements_dask(fos, threshold=1.0):
     """
@@ -579,7 +561,8 @@ def analyze_failure_directions_dask(failure_surfaces, mesh):
         mesh (pv.UnstructuredGrid): The mesh of the model.
 
     Returns:
-        dask.delayed.Delayed: A delayed object representing a list of failure directions for each failure surface.
+        dask.delayed.Delayed: A delayed object representing a list of failure directions 
+        for each failure surface.
     """
     print("Extracting failure directions in parallel...")
 
